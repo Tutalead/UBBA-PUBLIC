@@ -1,0 +1,24 @@
+[global]
+UIName = UBBA
+Description = Unification Brotherhood Balance Addon
+Playable = 1
+DllName = DXP3Mod
+ModFolder = UBBA
+ModVersion = 3.0.1
+TextureFE = 
+TextureIcon = 
+RuntimeMode = 3
+
+DataFolder.1 = Data
+DataFolder.2 = %LOCALE%\Data
+DataFolder.3 = Data_Shared_Textures\%TEXTURE-LEVEL%
+DataFolder.4 = Data_Sound\%SOUND-LEVEL%
+DataFolder.5 = Data_Music
+DataFolder.6 = Data_Whm\%MODEL-LEVEL%
+
+RequiredMod.1 = Unification
+RequiredMod.2 = DOWDE
+RequiredMod.3 = DXP3
+RequiredMod.4 = DXP2
+RequiredMod.5 = WXP
+RequiredMod.6 = W40k
