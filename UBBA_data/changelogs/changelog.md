@@ -17,3 +17,8 @@ url: https://docs.google.com/document/d/1_6vTxwvL9JpXYhJV-ooEREXnjGAI34SJbBLzaZ4
 date: 31/05/2026
 pages: 30
 url: https://docs.google.com/document/d/1K8WzFattZR3ItADVWhkiGH2Vc8c_VbphQYzyAoKUfJc
+
+## UBBA Version 3.2.0 Changelog
+date: 25/07/2026
+pages: 19
+url: https://docs.google.com/document/d/1l-mYKnD0LL4H0vjwVDuPLaRQ4uS4sjfcmNMROF1f_54
