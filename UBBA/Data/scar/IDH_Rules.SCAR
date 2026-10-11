@@ -1,0 +1,515 @@
+-- fuggles added the full daemonhost path thingy for 7.0
+-- go fuggles.
+-- he's amazing.
+-- woo.
+----------------------------------------------------------
+-- Daemonhunters Rules, made by Gambit @ 28/4/2020
+-- 1] In Love!: Enables Easter-egg thoughts of the
+--    Temi Commander and Librarian.
+-- 2] Daemonhosts! Enable them, if WinCon is on.
+-- 3] Daemonhosts updated to include Rogue ones.
+--		Updated made by Gambit @ 12/6/2021
+-- 4] Usage of old models - Gambit @ 03/8/2021
+-- 5] Added Flyer StormRaven Support - Gambit @ 25/8/2021
+----------------------------------------------------------
+
+import("WXPScarUtil.scar")
+import("WCUtil.scar")
+import("FlyerTransportAdditionalFunctions.scar")
+
+-- FLYER CODE
+-- Put here ALL entities of transport squads (the entities that have a squad_hold_ext).
+-- Nothing more is needed. Put transports in descending order of race usage, to make the code slightly faster...
+IDH_TransportSquadEntityNames = {"inquisition_razorback","inquisition_rhino_gk","inquisition_chimera_transport_gk","inquisition_stormraven_fury_entrenched","inquisition_land_raider"}
+SR_Time = World_GetGameTime()
+IDH_TransportSquadEntitiesTotal = table.getn(IDH_TransportSquadEntityNames)
+-- If you are simultaneously using more that one flyer per race, you may have to set it to true
+IDH_MoreFlyers = false
+-- If using one, SET it to false for maximum performance and 100% error-free operation.
+-- Even if > one, it will 99% work on false. It's just that on false, and the code is faster.
+
+G_IDH_AllowAcolyteDaemonhosts = true
+-- The percentage that gives the chance each Acolyte possession to be successful (Greater/Lesser)
+g_IDH_Daemonhost_Success = 80
+-- The percentage that gives the chance of a Rogue Daemonhost after a FAILED attempt to create an army one
+-- fuggles - screw that do it properly or don't do it at all, failed has gone.
+g_IDH_Daemonhost_Rogue = 100
+t_IDH_Daemonhost_Limit = {0,0,0,0,0,0,0,0,0,0,0,0,0}
+t_IDH_Cherubael_Limit = {0,0,0,0,0,0,0,0,0,0,0,0,0}
+
+function IDH_Rules_OnInit()
+
+	-- Global table for StormRaven Flyer
+	g_idhSRPlayersIDs = {}
+
+	-- Use new/old models
+	for idx = 0, World_GetPlayerCount()-1 do
+		local playerID = World_GetPlayerAt(idx)
+		if Player_GetRaceName(playerID) == "inquisition_daemonhunt_race" then
+			table.insert(g_idhSRPlayersIDs, playerID)
+			EGroup_Clear(EGroup_CreateIfNotFound("eg_PlayerEntitiesFromTransportSquads"..idx))
+			--Player_RestrictAbility(playerID, "inquisition_inquisitor_lord_create_daemonhost_2")
+			-- if G_IDH_UseOldModels ~= nil then
+			-- 	-- Player has chosen to use the OLD models. Restrict the new.
+			-- 	if G_IDH_UseOldModelsALL ~= nil then
+			-- 		-- Player has chosen to use all the OLD models. Restrict the new ones.
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_dreadknight")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_interceptors")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_paladin")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purgation")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purifier")
+			-- 	else
+			-- 		-- Player has chosen to use only the OLD Dreadknight model. Restrict the new DN, and the old GKs.
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_dreadknight")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_interceptors_old")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_paladin_old")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purgation_old")
+			-- 		Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purifier_old")
+			-- 	end
+			-- else
+				-- Player has chosen to use the NEW models. Restrict the old ones.
+			-- 	Player_RestrictSquad(playerID, "inquisition_squad_dreadknight_old")
+			-- 	Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_interceptors_old")
+			-- 	Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_paladin_old")
+			-- 	Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purgation_old")
+			-- 	Player_RestrictSquad(playerID, "inquisition_squad_grey_knights_purifier_old")
+			-- end
+
+			-- Select astra telepathica building abilities if player is in campaign or not
+			if pcall( MetaMap_GetAttackerRaceIndex ) then
+				Player_RestrictAbility( playerID, "inquisition_exterminatus" )
+				Player_RestrictAbility( playerID, "inquisition_mega_melta" )
+				Player_RestrictResearch( playerID, "inquisition_psy_power_1" )
+				Player_RestrictResearch( playerID, "inquisition_psy_power_2" )
+				Player_RestrictResearch( playerID, "inquisition_psy_power_3" )
+			else
+				Player_RestrictAbility( playerID, "inquisition_exterminatus_advance" )
+				Player_RestrictAbility( playerID, "inquisition_mega_melta_advance" )
+			end			
+		end
+	end
+
+	-- Allow Daemonhosts Rule, if selected by player, OR if we are in the Campaign!
+	if G_IDH_AllowAcolyteDaemonhosts ~= nil or pcall( MetaMap_GetAttackerRaceIndex ) then
+		g_IDH_PlayersIDs = {}
+		g_IDH_PlayersPuritans = {} -- Not used yet
+		g_IDH_AcolyteSquadIDs = {}
+		local da_or_ec_are_in_play = false
+		local wh_squad_name_to_disallow = ""
+		for i=0, World_GetPlayerCount()-1 do
+			local playerID = World_GetPlayerAt(i)
+			local race_name = Player_GetRaceName(playerID)
+			if race_name == "inquisition_daemonhunt_race" then
+				table.insert(g_IDH_PlayersIDs, playerID)
+				table.insert(g_IDH_PlayersPuritans, true) -- Not used yet
+				Player_GrantResearch(playerID, "inquisition_daemonhosts_dummy")
+			elseif race_name == "darkangels_race" or race_name == "fallen_angels_race" or race_name == "emperors_children_race" then
+				da_or_ec_are_in_play = true
+			end
+		end
+
+		if table.getn(g_IDH_PlayersIDs) > 0 then
+		--	if da_or_ec_are_in_play then wh_squad_name_to_disallow = "inquisition_squad_inquisitor_female"
+		--	else wh_squad_name_to_disallow = "inquisition_squad_astor_sabbathiel" end
+		--	for i=1, table.getn(g_IDH_PlayersIDs) do
+		---		Player_RestrictSquad(g_IDH_PlayersIDs[i], wh_squad_name_to_disallow)
+		--	end
+		-- Start the rule
+			Rule_AddIntervalDelay(IDH_DaemonHosts, 6, 6.125)
+		end
+	end
+	-- Run the Commander in Love check, to enable the proper hardpoints if conditions are met.
+	Rule_AddOneShot(IDH_Commanders_In_Love, 16.25)
+	Rule_AddInterval(Solitary_Brother,0 )
+	
+	-- Flyer Rule NOT needed in Last Stand and Kill-Team game modes
+	if G_Is_LastStand_Map ~= nil or KTGM_ENABLED ~= nil then
+		print("Last Stand or Kill-Team game mode.  IDH Flyer rule NOT started!")
+		return
+	end
+	
+	if table.getn(g_idhSRPlayersIDs) > 0 then
+		-- Define ALL other variables
+		-- First number is flying ones, second is flying + landed
+		g_idhStormRavens = {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}}
+		-- For more-than-one flyers, more checks must be made
+		g_idhLISsafeRecheckTMR = {0,0,0,0,0,0,0,0}
+		Used_For_IDH_Players = true
+		World_GetInitialWordEntityID()
+		if not Rule_Exists(World_GetAllPlayersSquadEntities) then
+			Rule_AddIntervalDelay(World_GetAllPlayersSquadEntities,3,0.875)
+		end
+		-- Start the Rule
+		Rule_Add(IDH_StromRavenCheck)
+	end
+end
+
+
+IDH_CheckPossession = function(sgroupid, itemindex, squadID)
+	-- Note: Possession is at ID 17 (Squad_GetActiveCommand), but I no longer use that
+	if Squad_GetMax(squadID) == 0 then
+		if Squad_IsAttached(squadID) then
+			local name = Squad_GetAttachedBlueprintName(squadID)
+			if name == "inquisition_squad_acolyte_doomed" or name == "inquisition_squad_acolyte_doomed_advance_sp" or name == "inquisition_squad_acolyte_doomed_gk_advance_sp" then
+				Squad_Detach(squadID)
+			end
+		else
+			local name = Squad_GetBlueprintName(squadID)
+			if name == "inquisition_squad_acolyte_doomed" or name == "inquisition_squad_acolyte_doomed_advance_sp" or name == "inquisition_squad_acolyte_doomed_gk_advance_sp" then
+				local already_in = false
+				-- Support for multiple Acolytes - you never know!
+				for i=1, table.getn(g_IDH_AcolyteSquadIDs) do
+					if squadID.id == g_IDH_AcolyteSquadIDs[i].id then
+						already_in = true; break
+					end
+				end
+				if not already_in then
+					table.insert(g_IDH_AcolyteSquadIDs, squadID)
+					-- Note: Do mind the time lapses! The main rule has an interval of 6 (less than half of 12.5), to enforce detachment.
+					if not Rule_Exists(IDH_CreateDaemonhost) then
+						Rule_AddOneShot(IDH_CreateDaemonhost, 10)
+					end
+				end
+			end
+		end
+	end
+end
+
+
+function IDH_CreateDaemonhost()
+	for i=1, table.getn(g_IDH_AcolyteSquadIDs) do
+		local squadID = g_IDH_AcolyteSquadIDs[i]
+		if Squad_Exists(squadID.id) then
+			local ownerID = Squad_GetPlayerOwner(squadID)
+			local pos = Squad_GetPosition(squadID)
+			local daemonboost = 0
+			-- Destroy the "Acolyte"
+			World_FXEvent("chaos/blood_pulse", pos)
+			Squad_DeSpawn(squadID); Squad_Destroy(squadID)
+			g_IDH_Daemonhost_Success = 100
+			if Player_GetResearchState(ownerID,"inquisition_daemon_mastery_4")==RS_Complete then
+			g_IDH_Daemonhost_Success = 100
+			elseif Player_GetResearchState(ownerID,"inquisition_daemon_mastery_3")==RS_Complete then
+			g_IDH_Daemonhost_Success = 100
+			elseif Player_GetResearchState(ownerID,"inquisition_daemon_mastery_2")==RS_Complete then
+			g_IDH_Daemonhost_Success = 100
+			elseif Player_GetResearchState(ownerID,"inquisition_daemon_mastery_1")==RS_Complete then
+			g_IDH_Daemonhost_Success = 100
+			end
+			--print ("what is success? It is"..g_IDH_Daemonhost_Success)
+			-- RNG Roll out of 100 has to be equal or less than Success Value to success
+			local successroll = World_GetRand(1,100)
+			--print ("what is success roll? It is "..successroll)
+			if successroll <= g_IDH_Daemonhost_Success then
+			--print "success"
+				-- So we are successful, so spawn the radical entity !! Spawn one of the two types
+				-- I coded this backwards, not sure why, but the lower the value the less likely
+				-- so 35 is a 35% chance of spawning a greater type
+				SGroup_Clear(SGroup_CreateIfNotFound("inq_temp_SGroup"))
+				local daemontrigger = 0
+				if Player_GetResearchState(ownerID,"inquisition_daemon_mastery_3")==RS_Complete then
+					daemontrigger = 100
+				elseif Player_GetResearchState(ownerID,"inquisition_daemon_mastery_2")==RS_Complete then
+					daemontrigger = 0
+				elseif Player_GetResearchState(ownerID,"inquisition_daemon_mastery_1")==RS_Complete then
+					daemontrigger = 0
+				end
+
+
+				local typeroll = World_GetRand(1,100)
+				if typeroll <= daemontrigger then
+					Util_CreateSquadsAtPositionEx(ownerID, "inq_temp_SGroup", "inquisition_squad_daemonhost_greater", pos, 1, 1)
+				elseif daemontrigger <= typeroll then
+					Util_CreateSquadsAtPositionEx(ownerID, "inq_temp_SGroup", "inquisition_squad_daemonhost_lesser", pos, 1, 1)
+				end
+				SGroup_Clear("inq_temp_SGroup")
+				end
+			end
+		end
+	
+
+	-- Reset the table of all Acolytes
+	g_IDH_AcolyteSquadIDs = {}
+	end
+
+function IDH_DaemonHosts()
+	for i=table.getn(g_IDH_PlayersIDs), 1, -1 do
+		if not Player_IsAlive(g_IDH_PlayersIDs[i]) or ( not pcall( MetaMap_GetAttackerRaceIndex ) and  Player_GetResearchState(g_IDH_PlayersIDs[i],"inquisition_branch_gk")==RS_Complete ) then
+			table.remove(g_IDH_PlayersIDs, i)
+			table.remove(g_IDH_PlayersPuritans, i)
+			if table.getn(g_IDH_PlayersIDs) == 0 then
+				Rule_Remove(IDH_DaemonHosts)
+				print("IDH Possessions and Daemonhosts Rule, Removed!")
+				return
+			end
+		else	
+			--if Player_GetResearchState(g_IDH_PlayersIDs[i],"inquisition_daemon_mastery_4")==RS_Complete then	
+			--	if t_IDH_Daemonhost_Limit[i] == 0 then
+			--	print "let's do this thing that we do"
+			--	Player_RestrictAbility(g_IDH_PlayersIDs[i], "inquisition_inquisitor_lord_create_daemonhost")
+			--	Player_UnRestrictAbility(g_IDH_PlayersIDs[i], "inquisition_inquisitor_lord_create_daemonhost_2")
+			--	Player_RestrictAbility(g_IDH_PlayersIDs[i], "inquisition_inquisitor_lord_create_daemonhost_advance")
+			--	Player_UnRestrictAbility(g_IDH_PlayersIDs[i], "inquisition_inquisitor_lord_create_daemonhost_advance_2")
+			--	t_IDH_Daemonhost_Limit[i] = 1
+			--	end
+			--end
+			SGroup_ForEach(Player_GetSquads(g_IDH_PlayersIDs[i]), IDH_CheckPossession)
+		end
+	end
+end
+
+
+function IDH_Commanders_In_Love()
+	local enable_canones_love = false
+	local enable_miriael_love = false
+	for i = 0, World_GetPlayerCount()-1 do
+		local player_race = Player_GetRaceName(World_GetPlayerAt(i))
+		if player_race == "witch_hunters_race" then enable_canones_love = true
+		elseif player_race == "emperors_children_race" then enable_miriael_love = true end
+	end
+	if enable_canones_love or enable_miriael_love then
+		for i = 0, World_GetPlayerCount()-1 do
+			local playerID = World_GetPlayerAt(i)
+			local player_race = Player_GetRaceName(playerID)
+			if player_race == "inquisition_daemonhunt_race" then
+				if enable_canones_love then
+					Modifier_ApplyToPlayer( Modifier_Create( MAT_EntityType, "default_weapon_modifier_hardpoint3", MUT_Addition, true, 1, "inquisition_grey_knight_hero"), playerID)
+					Modifier_ApplyToPlayer( Modifier_Create( MAT_EntityType, "default_weapon_modifier_hardpoint5", MUT_Addition, true, 1, "inquisition_grey_knight_hero_gk"), playerID)					
+				end
+				if enable_miriael_love then
+					Modifier_ApplyToPlayer( Modifier_Create( MAT_EntityType, "default_weapon_modifier_hardpoint4", MUT_Addition, true, 1, "inquisition_grey_knights_librarian"), playerID)
+				end
+			end
+		end
+	end
+end
+
+function Solitary_Brother()
+
+
+	local adamus_finder  = function(egroupid, itemindex, entityID)
+				local name = Entity_GetBlueprintName( entityID)
+				if name == "inq_assassin_melee" then
+			--	print "remove melee"
+				Entity_DeSpawn( entityID)
+				Entity_Destroy( entityID)
+				--restict ranged powers
+				Player_RestrictAbility( playerID, "inquisition_assassin_fleetoffoot")
+				Player_RestrictAbility( playerID, "inquisition_assassin_healing" )
+				Player_RestrictAbility( playerID, "inquisition_assassin_assassinate" )
+				Player_RestrictAbility( playerID, "inquisition_assassin_mode_switch_melee" ) 
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_enable_stealth")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_melta_bombs")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_assassinate_melee")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_mode_switch_range")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_smoke_launchers_new" )
+				elseif name == "inq_assassin_range" then
+			--	print "remove range"
+				Entity_DeSpawn( entityID)
+				Entity_Destroy( entityID)
+				Player_RestrictAbility( playerID, "inquisition_assassin_smoke_launchers_new" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_healing" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_assassinate" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_mode_switch_melee" ) 
+				Player_RestrictAbility( playerID, "inquisition_assassin_enable_stealth")
+				Player_RestrictAbility( playerID, "inquisition_assassin_melta_bombs")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_fleetoffoot")
+				Player_RestrictAbility( playerID, "inquisition_assassin_assassinate_melee")
+				Player_RestrictAbility( playerID, "inquisition_assassin_mode_switch_range")
+				end
+	end
+
+	for k = 0, World_GetPlayerCount()-1 do
+		playerID = World_GetPlayerAt(k)
+		local playerID = World_GetPlayerAt(k)
+		local player_race = Player_GetRaceName(playerID)
+			if player_race == "inquisition_daemonhunt_race" then
+			EGroup_Clear(EGroup_CreateIfNotFound("Adamusentities"..k))
+			EGroup_AddGroup(EGroup_CreateIfNotFound("Adamusentities"..k),Player_GetEntities(playerID))
+			EGroup_ForEach (EGroup_FromName("Adamusentities"..k),adamus_finder)
+	 		Util_GetSquadsByBP( SGroup_GetName(Player_GetSquads(playerID)), "g_trackeradamus"..k, "inquisition_squad_adamus")
+			g_adamus_trackercount = SGroup_CountSpawned("g_trackeradamus"..k)
+				if g_adamus_trackercount == 0 then
+				--print "no adamskis"
+				Player_RestrictAbility( playerID, "inquisition_assassin_smoke_launchers_new" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_healing" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_assassinate" )
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_mode_switch_melee" ) 
+				Player_RestrictAbility( playerID, "inquisition_assassin_enable_stealth")
+				Player_RestrictAbility( playerID, "inquisition_assassin_melta_bombs")
+				Player_UnRestrictAbility( playerID, "inquisition_assassin_fleetoffoot")
+				Player_RestrictAbility( playerID, "inquisition_assassin_assassinate_melee")
+				Player_RestrictAbility( playerID, "inquisition_assassin_mode_switch_range")
+				end
+			end
+	end
+
+
+end
+
+Scar_AddInit(IDH_Rules_OnInit)
+
+
+-------------------
+-- SR Flyer Code --
+-------------------
+function IDH_StromRavenCheck()
+	for i=1, table.getn(g_idhSRPlayersIDs) do
+		local playerID = g_idhSRPlayersIDs[i]
+		-- Check for ending the IDH_StromRavenCheck() rule if dead, or chosen the IDH branch
+		if not Player_IsAlive(playerID) or Player_GetResearchState(playerID,"inquisition_branch_inq.rgd") == RS_Complete then
+			table.remove(g_idhSRPlayersIDs, i)
+			table.remove(g_idhStormRavens, i)
+			table.remove(g_idhLISsafeRecheckTMR, i)
+			if table.getn(g_idhSRPlayersIDs) == 0 then
+				Used_For_IDH_Players = nil
+				print("IDH LIS Commanders/Valid SR Landing Place Rule, Removed !")
+				Rule_Remove(IDH_StromRavenCheck)
+			end
+			return
+		end
+		-- Check ONLY for the players that can have ThunderHawks
+		if Player_GetResearchState(playerID,"inquisition_ultimate_forces.rgd") == RS_Complete then
+			local flyingSRs = 0
+			local landedSRs = 0
+			local check = false
+			local gameTime = World_GetGameTime()
+			-- if IDH_MoreFlyers, Recheck to make sure we despawned all LIS
+			if IDH_MoreFlyers and g_idhLISsafeRecheckTMR[i] ~= 0 and gameTime > g_idhLISsafeRecheckTMR[i] then
+				IDH_LISCheck(playerID)
+				g_idhLISsafeRecheckTMR[i] = 0
+			end
+			-- The function that performs the landing/taking-off, and counts all THs
+			local stormraven_finder  = function( sgroupid, itemindex, squadID )
+				local name = Squad_GetBlueprintName(squadID)
+				if name == "inquisition_squad_stormraven_fury" then
+					flyingSRs = flyingSRs + 1
+					-- Check if landing is enabled: Ability is specially coded, and returns 10 if enabled
+					if Squad_GetActiveCommand(squadID) == 10 then
+						local squadPos = Squad_GetPosition(squadID)
+						local LZfinder = Entity_Create("inquisition_stormraven_fury_entrenched", playerID, squadPos)
+						local squadPosValid = World_GetSpawnablePosition(squadPos,LZfinder)
+						if squadPosValid.y == squadPos.y or (Is_SoulStorm_Game_Map ~= true and World_DistancePointToPoint(squadPos,squadPosValid) > 14) then
+							Entity_Destroy(LZfinder)
+							-- Prevention of more-than-one notifications (detection usually happens twice, and cycle is 0.125).
+							if gameTime > SR_Time + 0.3 then
+								if Tut_GetLocalPlayerIndex() == World_GetPlayerIndex(playerID) then
+									local sIcon = "warning"
+									local message1 = "Strom Raven: No valid Landing Zone Found !"
+									local message2 = "There is no valid nearby place for the Storm Raven to land.  Move it to an area with level, unoccupied ground with no buildings or structures directly beneath it, and try again !"
+									local sSound = "event_cue_notifications/cheats!"
+									EventCue_DoEvent(sIcon, sSound, message1, message2)
+								end
+								SR_Time = gameTime
+							end
+						else
+							Entity_Destroy(LZfinder)
+							SGroup_Clear(SGroup_CreateIfNotFound("sr_to_lz_tk_of"))
+							SGroup_Add("sr_to_lz_tk_of",squadID)
+							Command_Squad(playerID, "sr_to_lz_tk_of", SCMD_Entrench)
+						end
+					end
+				elseif name == "inquisition_squad_stormraven_fury_entrenched" then
+					landedSRs = landedSRs + 1
+					-- Check if taking off is enabled: Ability is specially coded, sets 0 max members, temporarily
+					if Squad_GetMax(squadID) == 0 then
+						SGroup_Clear(SGroup_CreateIfNotFound("sr_to_lz_tk_of"))
+						SGroup_Add("sr_to_lz_tk_of",squadID)
+						Command_Squad(playerID, "sr_to_lz_tk_of", SCMD_Uproot)
+					end
+				end
+			end
+			-- Start performing the checks for landing
+			SGroup_ForEach(Player_GetSquads(playerID), stormraven_finder)
+			-- Perform the checks for LIS Commanders, if we do have THs in game
+			local totalTHs = flyingSRs + landedSRs
+			if flyingSRs > 0 or g_idhStormRavens[i][1] > 0 then
+				-- See if we have one less total TH number, which means at least one was destroyed
+				if g_idhStormRavens[i][2] < totalTHs then
+					g_idhStormRavens[i][2] = totalTHs
+				elseif g_idhStormRavens[i][2] > totalTHs then
+					g_idhStormRavens[i][2] = totalTHs
+					check = true
+				end
+				-- See if we have one less flying one. If one was also destroyed, then retrieve LIS
+				if g_idhStormRavens[i][1] < flyingSRs then
+					g_idhStormRavens[i][1] = flyingSRs
+				elseif g_idhStormRavens[i][1] > flyingSRs then
+					g_idhStormRavens[i][1] = flyingSRs
+					if check then
+						g_idhStormRavens[i][2] = 0
+						-- Flying Strom Raven Down!  Check for LIS
+						if Tut_GetLocalPlayerIndex() == World_GetPlayerIndex(playerID) then
+							local sIcon = "idh_stromraven_down"
+							local message1 = "Flying Strom Raven Taken Down - All boarded squads are killed !"
+							local message2 = ""
+							local sSound = "event_cue_notifications/team_change"
+							EventCue_DoEvent(sIcon, sSound, message1, message2)
+						end
+						IDH_LISCheck(playerID)
+						-- if IDH_MoreFlyers Recheck after > 1 sec, to make sure we despawned all
+						if IDH_MoreFlyers then
+							g_idhLISsafeRecheckTMR[i] = gameTime + 1
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+
+function IDH_LISCheck(playerID)
+	local playerSquadsSG = Player_GetSquads(playerID)
+	local despawnedCount = SGroup_CountDeSpawned(playerSquadsSG)
+	if despawnedCount>0 then
+		local playerEntitiesEG = Player_GetEntities(playerID)
+		IDH_GetSpecificPlayerSquadEntities(playerID)
+		EGroup_AddGroup(playerEntitiesEG,"eg_PlayerEntitiesFromTransportSquads"..World_GetPlayerIndex(playerID))
+		for i=despawnedCount,1,-1 do
+			local despawnedSquadID = SGroup_GetDeSpawnedSquadAt(playerSquadsSG,i)
+			if not Squad_IsInHold(despawnedSquadID,playerEntitiesEG) then
+				local name = Squad_GetBlueprintName(despawnedSquadID)
+				if name ~= "inquisition_squad_stormraven_fury_entrenched" and name ~= "inquisition_squad_stormraven_fury" then
+					print("Found LIS squad: "..name..". Destroyed!")
+					pcall(Squad_Destroy, despawnedSquadID)
+				end
+			end
+		end
+	end
+end
+
+
+function IDH_GetSpecificPlayerSquadEntities(playerID)
+	if Player_IsAlive(playerID) then
+		local MaxWorldID = 0
+		local currentID = Entity_Create( "help_dummy_entity", playerID, World_Pos( 0, 0, 0 ) )
+		MaxWorldID = currentID.id
+		Entity_Destroy(currentID)
+		if MaxWorldID <= CurrentWorldEntityID[0] then CurrentWorldEntityID[0] = MaxWorldID return end
+		local entityID = nil
+		local entityExists = false
+		local entityNAME = ""
+		local pIDX = World_GetPlayerIndex(playerID)
+		--iterate among the current set of entities, adding the required, to the proper egroup, per race.
+		for i=CurrentWorldEntityID[0]-10, MaxWorldID do
+			entityExists, entityID = pcall( Entity_FromWorldID, i )
+			if entityExists then
+				if not (Entity_GetWorldOwner(entityID) or Entity_IsBuilding(entityID)) and Entity_GetHealth(entityID) > 0
+				and World_GetPlayerIndex(Entity_GetPlayerOwner(entityID)) == pIDX then
+					entityNAME = Entity_GetBlueprintName(entityID)
+					for j=1, IDH_TransportSquadEntitiesTotal do
+						if entityNAME == IDH_TransportSquadEntityNames[j] then
+							EGroup_Add("eg_PlayerEntitiesFromTransportSquads"..pIDX, entityID)
+							break
+						end
+					end
+				end
+			end
+		end
+		CurrentWorldEntityID[0] = MaxWorldID
+	end
+end
+
+
+
