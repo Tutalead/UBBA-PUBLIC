@@ -32,3 +32,8 @@ url: https://docs.google.com/document/d/1_xRnQEmSuwrTV7JuP1MiKZmgIcjUG2cTbYUMa9E
 date: 27/09/2026
 pages: 60
 url: https://docs.google.com/document/d/1vdctLivE2jhTWB1er16aL3f0FR5r75rVLVATPNCxtKc
+
+## UBBA Version 3.4.5 Changelog
+date: 26/10/2026
+pages: 28
+url: https://docs.google.com/document/d/1BSX8hygPpeMyeSQ6HpnuKB8lIZWHh9TxQqvYDNXimGE
